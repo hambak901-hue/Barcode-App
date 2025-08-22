@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Barcode Generator & Scanner</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <link rel="preconnect" href="https://unpkg.com" />
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #0f172a;
+      color: #e5e7eb;
+      margin: 0;
+      padding: 16px;
+    }
+    h1 { text-align: center; color: #22c55e; }
+    .tabs { display: flex; gap: 10px; justify-content: center; margin-bottom: 20px; }
+    .tab-btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 8px;
+      background: #1f2937;
+      color: white;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .tab-btn.active { background: #22c55e; color: #052e16; }
+    .card {
+      background: #1f2937;
+      padding: 16px;
+      border-radius: 12px;
+      max-width: 600px;
+      margin: auto;
+    }
+    input, select, button {
+      width: 100%;
+      padding: 10px;
+      margin: 6px 0;
+      border-radius: 6px;
+      border: 1px solid #374151;
+      background: #111827;
+      color: white;
+    }
+    button { cursor: pointer; font-weight: bold; }
+    svg { max-width: 100%; }
+    .hidden { display: none; }
+    #reader { width: 100%; }
+    .output {
+      background: #111827;
+      padding: 10px;
+      border-radius: 6px;
+      margin-top: 10px;
+      word-break: break-word;
+    }
+  </style>
+</head>
+<body>
+  <h1>📦 Barcode Generator + Scanner</h1>
+
+  <div class="tabs">
+    <button class="tab-btn active" id="tabGen">Generate</button>
+    <button class="tab-btn" id="tabScan">Scan</button>
+  </div>
+
+  <!-- Generator -->
+  <div class="card" id="panelGen">
+    <label>Data / Number</label>
+    <input id="codeValue" placeholder="e.g. 123456789012" />
+    <label>Format</label>
+    <select id="format">
+      <option value="CODE128">CODE128 (universal)</option>
+      <option value="EAN13">EAN-13</option>
+      <option value="EAN8">EAN-8</option>
+      <option value="UPC">UPC-A</option>
+      <option value="CODE39">CODE39</option>
+    </select>
+    <label>Width</label>
+    <input type="number" id="barWidth" value="2" />
+    <label>Height</label>
+    <input type="number" id="barHeight" value="80" />
+    <label><input type="checkbox" id="showValue" checked /> Show text</label>
+    <button id="btnGenerate">Generate</button>
+    <button id="btnDownload">Download PNG</button>
+    <div style="margin-top:15px; text-align:center;">
+      <svg id="barcode"></svg>
+    </div>
+  </div>
+
+  <!-- Scanner -->
+  <div class="card hidden" id="panelScan">
+    <button id="btnStartScan">Start camera</button>
+    <button id="btnStopScan">Stop camera</button>
+    <div id="reader"></div>
+    <div id="scanResult" class="output">—</div>
+  </div>
+
+  <!-- Libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+  <script src="https://unpkg.com/html5-qrcode"></script>
+
+  <script>
+    const tabGen = document.getElementById('tabGen');
+    const tabScan = document.getElementById('tabScan');
+    const panelGen = document.getElementById('panelGen');
+    const panelScan = document.getElementById('panelScan');
+    let scannerUI = null;
+    let lastDecoded = null;
+
+    function setTab(which) {
+      if (which === 'gen') {
+        tabGen.classList.add('active');
+        tabScan.classList.remove('active');
+        panelGen.classList.remove('hidden');
+        panelScan.classList.add('hidden');
+        stopScanner();
+      } else {
+        tabScan.classList.add('active');
+        tabGen.classList.remove('active');
+        panelScan.classList.remove('hidden');
+        panelGen.classList.add('hidden');
+      }
+    }
+    tabGen.onclick = () => setTab('gen');
+    tabScan.onclick = () => setTab('scan');
+
+    // Generator
+    function generate() {
+      const val = document.getElementById('codeValue').value.trim();
+      if (!val) { alert('Enter a value'); return; }
+      JsBarcode("#barcode", val, {
+        format: document.getElementById('format').value,
+        width: parseInt(document.getElementById('barWidth').value),
+        height: parseInt(document.getElementById('barHeight').value),
+        displayValue: document.getElementById('showValue').checked
+      });
+    }
+    function downloadPNG() {
+      const svg = document.getElementById('barcode');
+      if (!svg.outerHTML) { alert('Generate first!'); return; }
+      const svgData = new XMLSerializer().serializeToString(svg);
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const img = new Image();
+      img.onload = () => {
+        canvas.width = img.width * 2;
+        canvas.height = img.height * 2;
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const a = document.createElement('a');
+        a.href = canvas.toDataURL('image/png');
+        a.download = 'barcode.png';
+        a.click();
+      };
+      img.src = 'data:image/svg+xml;base64,' + btoa(svgData);
+    }
+    document.getElementById('btnGenerate').onclick = generate;
+    document.getElementById('btnDownload').onclick = downloadPNG;
+
+    // Scanner
+    function onScanSuccess(decodedText) {
+      lastDecoded = decodedText;
+      document.getElementById('scanResult').textContent = decodedText;
+    }
+    function startScanner() {
+      if (scannerUI) return;
+      scannerUI = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
+      scannerUI.render(onScanSuccess);
+    }
+    function stopScanner() {
+      if (scannerUI) {
+        scannerUI.clear();
+        scannerUI = null;
+      }
+    }
+    document.getElementById('btnStartScan').onclick = startScanner;
+    document.getElementById('btnStopScan').onclick = stopScanner;
+
+    setTab('gen');
+  </script>
+</body>
+</html>
